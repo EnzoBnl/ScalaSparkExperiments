@@ -1,4 +1,4 @@
-package com.enzobnl.wordcountsparkscala;
+package com.enzobnl.wordcountsparkscala
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 
@@ -14,7 +14,7 @@ object WordCount {
     // Split up into words.
     val words = input.flatMap(line => line.split(" "))
     // Transform into word and count.
-    val counts = words.map(word => (word, 1)).reduceByKey{case (x, y) => x + y}
+    val counts = words.map(word => (word, 1)).reduceByKey(_ + _)
     // Save the word count back out to a text file, causing evaluation.
     counts.sortBy{case (_, value) => value}.repartition(1).saveAsTextFile(outputFile)
   }
