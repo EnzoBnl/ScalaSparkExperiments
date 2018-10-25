@@ -1,4 +1,4 @@
-package com.enzobnl.playground
+package com.enzobnl.submit
 import sys.process._
 object SparkSubmitter {
   def main(args: Array[String]): Unit = {
