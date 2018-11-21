@@ -9,5 +9,6 @@ object SparkSubmitter {
     val toCall = s"c:/applications/anaconda3/scripts/spark-submit.cmd --class $mainClass $jar $in $out"
     println(toCall)
     toCall !
+
   }
 }

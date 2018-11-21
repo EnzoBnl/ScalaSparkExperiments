@@ -1,7 +1,7 @@
 package com.enzobnl.wordcountsparkscala
 import org.apache.spark._
 import org.apache.spark.SparkContext._
-
+//import org.apache.spark.sql.SQLContext.implicits._
 object WordCount {
   def main(args: Array[String]) {
     val inputFile = args(0)
