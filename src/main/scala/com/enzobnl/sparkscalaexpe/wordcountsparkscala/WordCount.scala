@@ -1,4 +1,5 @@
-package com.enzobnl.wordcountsparkscala
+package com.enzobnl.sparkscalaexpe.wordcountsparkscala
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 //import org.apache.spark.sql.SQLContext.implicits._

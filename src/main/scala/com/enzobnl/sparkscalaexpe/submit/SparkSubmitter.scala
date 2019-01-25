@@ -1,4 +1,5 @@
-package com.enzobnl.submit
+package com.enzobnl.sparkscalaexpe.submit
+
 import sys.process._
 object SparkSubmitter {
   def main(args: Array[String]): Unit = {
