@@ -2,10 +2,8 @@ package com.enzobnl.sparkscalaexpe
 
 import com.enzobnl.sparkscalaexpe.playground._
 
-object Main {
-  val torun: Runnable = TourOfScalaStuff1
+object Main extends App {
+  val runnables: Seq[Runnable] = Seq(TourOfScalaStuff1)
+  for(torun <- runnables) torun.run
 
-  def main(args: Array[String]): Unit = {
-    torun.run
-  }
 }

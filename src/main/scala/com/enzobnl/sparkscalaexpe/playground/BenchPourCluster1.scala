@@ -1,27 +1,70 @@
 package com.enzobnl.sparkscalaexpe.playground
 
-import com.enzobnl.sparkscalaexpe.util.QuickSQLContextFactory
+import com.enzobnl.sparkscalaexpe.util.{QuickSQLContextFactory, Utils}
 import org.apache.spark.sql.functions._
-
+import com.enzobnl.sparkscalaexpe.util.Utils.time
+import org.apache.spark.sql.{DataFrame, SQLContext}
+import java.math.BigInteger
+import java.security.MessageDigest
 object BenchPourCluster1 extends Runnable {
-  override def run: Unit={
-    val spark = QuickSQLContextFactory.getOrCreate("codeGenExpe")
+  def fullInsight(df: DataFrame, tag: String): Unit ={
+        println(s">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>$tag")
+        println(df.queryExecution.debug.codegen())
+        println(df.explain(true))
+  }
+  override def run(): Unit={
+    val spark: SQLContext = QuickSQLContextFactory.getOrCreate("codeGenExpe")
 
     //UDF
-    val my_udf = udf((i: Int, j: Int) => i + j)
+    val f: (Int, Int) => Int =
+      (ms: Int, res: Int) => {
+        val t0 = System.currentTimeMillis()
+        while(System.currentTimeMillis() - t0 < ms){
+          MessageDigest.getInstance("SHA-256").digest(t0.toString.getBytes("UTF-8"))
+        }
+        res
+      }
+    //time {f(250, 1)}; System.exit(0)
+    val my_udf = udf(f)
     spark.udf.register("my_udf_name", my_udf)
-    val df = spark.read.option("header", true).option("delimiter", "\t").option("inferSchema", true).csv("C:/Applications/khiops/samples/Adult/Adult.txt")
-    df.createOrReplaceGlobalTempView("adult")
-    //print(df.selectExpr("INT(hash(age)) + INT(hash(age))", "INT(hash(1)) + INT(hash(1))").queryExecution.debug.codegen())
-    //print(spark.sql("SELECT INT(hash(race)) + INT(hash(age)), hash(race) FROM global_temp.adult").queryExecution.debug.codegen())
-    //print(spark.sql("SELECT (exp(INT(race)) + exp(INT(race)))*(exp(INT(race)) + exp(INT(race))) FROM global_temp.adult").queryExecution.debug.codegen())
-    // covar: Optimized (aggregate with 2 args)
-    //    val df_ = spark.sql("SELECT concat(age, INT(race)) + concat(age, INT(race)), concat(age, INT(race)) FROM global_temp.adult") // NO
-    val df_ = spark.sql("SELECT my_udf_name(age, education_num) + my_udf_name(age, education_num), my_udf_name(age, education_num) FROM global_temp.adult")
-    //val df_ = spark.sql("SELECT hash(age+ INT(race)) + hash(age+ INT(race)), hash(age, INT(race)) FROM global_temp.adult")
+    val df = spark.read.option("header", value=true).option("delimiter", "\t").option("inferSchema", value=true).csv("C:/Applications/khiops/samples/Adult/Adult.txt")
+    val linesNumber = 50
+    val ms = 100
+    df.limit(linesNumber).createOrReplaceGlobalTempView("adult")
+    // NOT OPTI
+    time {spark.sql(s"SELECT SUM(my_udf_name($ms, age)), AVG(my_udf_name($ms,age)+1) FROM global_temp.adult GROUP BY age").collect()}
+    //OPTI
+    time {spark.sql(s"SELECT SUM(t), AVG(t+1) FROM (SELECT *, my_udf_name($ms, age) AS t FROM global_temp.adult) GROUP BY age").collect()}
 
-    print(df_.queryExecution.debug.codegen())
-    print(df_.explain(true))
 
+    //System.exit(0)
+    // NOT OPTI
+    fullInsight(spark.sql(s"SELECT SUM(my_udf_name($ms, age)), AVG(my_udf_name($ms,age)+1) FROM global_temp.adult GROUP BY age"), tag="+1 (NO)")
+    //OPTI
+    fullInsight(spark.sql(s"SELECT SUM(t), AVG(t+1) FROM (SELECT *, my_udf_name($ms, age) AS t FROM global_temp.adult) GROUP BY age"), tag="+1 (O)")
+
+    //System.exit(0)
+    // NOT OPTI
+    fullInsight(spark.sql(s"SELECT SUM(my_udf_name($ms, age)), AVG(my_udf_name($ms,age)) FROM global_temp.adult GROUP BY age"), tag="_ (NO)")
+    //OPTI
+    fullInsight(spark.sql(s"SELECT SUM(t), AVG(t) FROM (SELECT *, my_udf_name($ms, age) AS t FROM global_temp.adult) GROUP BY age"), tag="_ (O)")
   }
 }
+
+//// EXPE 1 basée ! (il faut ajouter une addition dedans pour qu'elle valide:
+////non:
+//// NOT OPTI
+//time {spark.sql(s"SELECT SUM(my_udf_name($ms, age)), AVG(my_udf_name($ms,age)) FROM global_temp.adult GROUP BY age").collect()}
+//  //OPTI
+//  time {spark.sql(s"SELECT SUM(t), AVG(t) FROM (SELECT *, my_udf_name($ms, age) AS t FROM global_temp.adult) GROUP BY age").collect()}
+////oui:
+//// NOT OPTI
+//time {spark.sql(s"SELECT SUM(my_udf_name($ms, age)), AVG(my_udf_name($ms,age)+1) FROM global_temp.adult GROUP BY age").collect()}
+//  //OPTI
+//  time {spark.sql(s"SELECT SUM(t), AVG(t+1) FROM (SELECT *, my_udf_name($ms, age) AS t FROM global_temp.adult) GROUP BY age").collect()}
+
+//    //EXPE 8 validée
+//    // NOT OPTI
+//    time {spark.sql(s"SELECT my_udf_name($ms, age)*2, my_udf_name($ms,age) FROM global_temp.adult").collect()}
+//    //OPTI
+//    time {spark.sql(s"SELECT t*2, t FROM (SELECT *, my_udf_name($ms, age) AS t FROM global_temp.adult) ").collect()}
