@@ -49,6 +49,13 @@
             <artifactId>vegas-spark_2.11</artifactId>
             <version>0.3.11</version>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/embedded-kafka/embedded-kafka -->
+        <dependency>
+            <groupId>embedded-kafka</groupId>
+            <artifactId>embedded-kafka</artifactId>
+            <version>0.6.0</version>
+        </dependency>
+
 
     </dependencies>
 

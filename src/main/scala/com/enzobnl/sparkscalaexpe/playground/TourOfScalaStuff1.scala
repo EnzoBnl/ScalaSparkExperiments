@@ -95,43 +95,34 @@ object TourOfScalaStuff1 extends Runnable {
 
 
   override def run: Unit={
-
-//    var rambo = "rambo"
-//    var A = new Animal("chacha")
-//    var B = A
-//    A.roa
-//    B.name = "chichien"
-//    A.roa
-//    val g = (a: Int, ramboedName: String, s: String, serv: String) => println(s"Xx-$s$ramboedName-xX[$serv]$a")
-//    val f = () => {
-//      val ramboedName = "PL"
-//      val a = rambo
-//      println(a.hashCode(), rambo.hashCode())
-//      g(_: Int, ramboedName, a, _: String)
-//    }
-//    val h = () => rambo
-//    val rambor = f()
-//    rambor(1, "Menalt")
-//    rambo = "RaMBOOO"
-//    rambor(2,"Menalt")
-//    print(h())
-    var rambo = new Animal("chacha")
-    val g = (a: Int, ramboedName: String, s: Animal, serv: String) => println(s"Xx-${s.name}$ramboedName-xX[$serv]$a")
-    val f = () => {
-      val ramboedName = "PL"
-      val a = rambo
-      println(a.hashCode(), rambo.hashCode())
-      g(_: Int, ramboedName, rambo, _: String)
-//      g(_: Int, ramboedName, a, _: String)
+    abstract class Animal[T] {
+      def name[T>:String]: T
     }
-    val h = () => rambo.name
-    val rambor = f()
-    rambor(1, "Menalt")
-    val a = rambo
-    rambo = new Animal("chienchien")
-    a.name = "RaMBOOO"
-    rambor(2,"Menalt")
-    print(h())
+
+    abstract class Pet[T] extends Animal[T] {}
+
+    class Cat[T] extends Pet[T] {
+      override def name[T>:String]: T = "Cat"
+    }
+    class Dog[T] extends Pet[T] {
+      override def name[T>:String]: T = "Dog"
+    }
+
+
+    class Lion[T] extends Animal[T] {
+      override def name: String = "Lion"
+    }
+
+    class PetContainer[T, P <: Animal[T]](p: P) {
+      def pet: P = p
+    }
+
+   // val dogContainer = new PetContainer[Dog](new Dog)
+    val catContainer = new PetContainer[Animal](new Cat)
+
+    // this would not compile
+//    val lionContainer = new PetContainer[Lion](new Lion)
+
   }
 }
 
