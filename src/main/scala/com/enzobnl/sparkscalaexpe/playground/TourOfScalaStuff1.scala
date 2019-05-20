@@ -98,27 +98,27 @@ object TourOfScalaStuff1 extends Runnable {
     abstract class Animal[T] {
       def name[T>:String]: T
     }
-
-    abstract class Pet[T] extends Animal[T] {}
-
-    class Cat[T] extends Pet[T] {
-      override def name[T>:String]: T = "Cat"
-    }
-    class Dog[T] extends Pet[T] {
-      override def name[T>:String]: T = "Dog"
-    }
-
-
-    class Lion[T] extends Animal[T] {
-      override def name: String = "Lion"
-    }
-
-    class PetContainer[T, P <: Animal[T]](p: P) {
-      def pet: P = p
-    }
+//
+//    abstract class Pet[T] extends Animal[T] {}
+//
+//    class Cat[T] extends Pet[T] {
+//      override def name[T>:String]: T = "Cat"
+//    }
+//    class Dog[T] extends Pet[T] {
+//      override def name[T>:String]: T = "Dog"
+//    }
+//
+//
+//    class Lion[T] extends Animal[T] {
+//      override def name: String = "Lion"
+//    }
+//
+//    class PetContainer[T, P <: Animal[T]](p: P) {
+//      def pet: P = p
+//    }
 
    // val dogContainer = new PetContainer[Dog](new Dog)
-    val catContainer = new PetContainer[Animal](new Cat)
+//    val catContainer = new PetContainer[Animal](new Cat)
 
     // this would not compile
 //    val lionContainer = new PetContainer[Lion](new Lion)
