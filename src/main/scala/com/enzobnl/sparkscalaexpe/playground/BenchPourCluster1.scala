@@ -1,9 +1,9 @@
 package com.enzobnl.sparkscalaexpe.playground
 
-import com.enzobnl.sparkscalaexpe.util.{QuickSQLContextFactory, Utils}
+import com.enzobnl.sparkscalaexpe.util.{QuickSparkSessionFactory, Utils}
 import org.apache.spark.sql.functions._
 import com.enzobnl.sparkscalaexpe.util.Utils.time
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 import java.math.BigInteger
 import java.security.MessageDigest
 object BenchPourCluster1 extends Runnable {
@@ -13,7 +13,7 @@ object BenchPourCluster1 extends Runnable {
         println(df.explain(true))
   }
   override def run(): Unit={
-    val spark: SQLContext = QuickSQLContextFactory.getOrCreate("codeGenExpe")
+    val spark: SparkSession = QuickSparkSessionFactory.getOrCreate("codeGenExpe")
 
     //UDF
     val f: (Int, Int) => Int =

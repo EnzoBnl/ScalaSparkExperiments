@@ -1,12 +1,12 @@
 package com.enzobnl.sparkscalaexpe.playground
 
-import com.enzobnl.sparkscalaexpe.util.QuickSQLContextFactory
+import com.enzobnl.sparkscalaexpe.util.QuickSparkSessionFactory
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 object SparkStuff3 extends Runnable {
   override def run: Unit={
-    val spark = QuickSQLContextFactory.getOrCreate("codeGenExpe")
+    val spark = QuickSparkSessionFactory.getOrCreate("codeGenExpe")
     val f: Int => Int = (t: Int) => t*2
     val myUDF = udf(f)
     spark.udf.register("myUDF", myUDF)

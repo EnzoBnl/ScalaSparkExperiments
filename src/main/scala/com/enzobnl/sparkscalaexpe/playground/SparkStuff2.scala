@@ -1,11 +1,11 @@
 package com.enzobnl.sparkscalaexpe.playground
 
-import com.enzobnl.sparkscalaexpe.util.QuickSQLContextFactory
+import com.enzobnl.sparkscalaexpe.util.QuickSparkSessionFactory
 import org.apache.spark.sql.functions._
 
 object SparkStuff2 extends Runnable {
   override def run: Unit={
-    val spark = QuickSQLContextFactory.getOrCreate("codeGenExpe")
+    val spark = QuickSparkSessionFactory.getOrCreate("codeGenExpe")
 
     //UDF
     val my_udf = udf((i: Int, j: Int) => {i + j})
@@ -21,12 +21,16 @@ object SparkStuff2 extends Runnable {
     //    val df_ = spark.sql("SELECT concat(age, INT(race)) + concat(age, INT(race)), concat(age, INT(race)) FROM global_temp.adult") // NO
     val df_ = spark.sql("SELECT my_udf_name(age, education_num) + my_udf_name(age, education_num), my_udf_name(age, education_num) FROM global_temp.adult")
     //val df_ = spark.sql("SELECT hash(age+ INT(race)) + hash(age+ INT(race)), hash(age, INT(race)) FROM global_temp.adult")
-    val df__ = spark.sql("SELECT my_udf_name2(age, education_num) + my_udf_name2(age, education_num), my_udf_name2(age, education_num) FROM global_temp.adult")
+    val df__ = spark.sql("SELECT hash(STRING(age)) + hash(STRING(age)), hash(STRING(age)) FROM global_temp.adult")
+    val df___ = spark.sql("SELECT hash('bla') + hash('bla'), hash('bla') FROM global_temp.adult")
+
 
     print(df_.queryExecution.debug.codegen())
     print(df_.explain(true))
     print(df__.queryExecution.debug.codegen())
     print(df__.explain(true))
+    print(df___.queryExecution.debug.codegen())
+    print(df___.explain(true))
 
   }
 }
