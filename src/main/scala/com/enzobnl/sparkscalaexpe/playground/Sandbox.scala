@@ -37,10 +37,18 @@ object Sandbox extends Runnable {
       ("Foldable", "Cell", 3000),
       ("Pro", "Tablet", 4500),
       ("Pro2", "Tablet", 6500))).toDF("product", "category", "revenue")
-
-  override def run(): Unit = {
-    def f(i: Int): Unit ={
-      //i=2
+  def memoize(f: Any): Any ={
+    f match{
+      case _: Function1[Any, Any] => {
+        f
+      }
+      case _ => {
+        f
+      }
     }
+  }
+  override def run(): Unit = {
+    val f = (i:Int) => i*8
+    println(memoize(f).asInstanceOf[Function1[Any, Any]](1))
   }
 }
