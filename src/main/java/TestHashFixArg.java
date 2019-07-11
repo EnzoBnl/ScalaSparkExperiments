@@ -39,7 +39,6 @@ public class TestHashFixArg {
 
             project_mutableStateArray_0[0].write(1, 1054255222);
             append((project_mutableStateArray_0[0].getRow()));
-
         }
 
         protected void processNext() throws java.io.IOException {

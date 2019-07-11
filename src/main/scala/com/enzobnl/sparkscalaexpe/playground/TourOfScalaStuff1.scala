@@ -1,5 +1,5 @@
 package com.enzobnl.sparkscalaexpe.playground
-import org.apache.http.protocol.ExecutionContext
+//import org.apache.http.protocol.ExecutionContext
 import sun.misc.Regexp
 
 import scala.collection.mutable.ArrayBuffer

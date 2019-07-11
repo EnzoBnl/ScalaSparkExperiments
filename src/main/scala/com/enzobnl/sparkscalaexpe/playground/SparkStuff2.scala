@@ -13,6 +13,7 @@ object SparkStuff2 extends Runnable {
     val my_udf2 = udf((i: Int, j: Int) => {var j=0;for(k <- 1 to 1000000){if(k%3==0)j=j+k;};j})
     spark.udf.register("my_udf_name2", my_udf2)
     val df = spark.read.option("header", true).option("delimiter", "\t").option("inferSchema", true).csv("C:/Applications/khiops/samples/Adult/Adult.txt")
+//    val df = spark.createDataFrame(Seq((1,2),(3,null))).toDF("age", "education_num")
     df.createOrReplaceGlobalTempView("adult")
     //print(df.selectExpr("INT(hash(age)) + INT(hash(age))", "INT(hash(1)) + INT(hash(1))").queryExecution.debug.codegen())
     //print(spark.sql("SELECT INT(hash(race)) + INT(hash(age)), hash(race) FROM global_temp.adult").queryExecution.debug.codegen())
@@ -21,8 +22,12 @@ object SparkStuff2 extends Runnable {
     //    val df_ = spark.sql("SELECT concat(age, INT(race)) + concat(age, INT(race)), concat(age, INT(race)) FROM global_temp.adult") // NO
     val df_ = spark.sql("SELECT my_udf_name(age, education_num) + my_udf_name(age, education_num), my_udf_name(age, education_num) FROM global_temp.adult")
     //val df_ = spark.sql("SELECT hash(age+ INT(race)) + hash(age+ INT(race)), hash(age, INT(race)) FROM global_temp.adult")
-    val df__ = spark.sql("SELECT hash(STRING(age)) + hash(STRING(age)), hash(STRING(age)) FROM global_temp.adult")
-    val df___ = spark.sql("SELECT hash('bla') + hash('bla'), hash('bla') FROM global_temp.adult")
+    val df__ = spark.sql("SELECT hash(STRING(age + education_num)) + hash(STRING(age + education_num)), hash(STRING(age + education_num)), (age + education_num)*2 FROM global_temp.adult")
+    println("<<<<")
+    df__.limit(10).show()
+    println("<<<<")
+
+    val df___ = spark.sql("SELECT hash('bla') + hash('bla'), hash('bla'), hash('bla') FROM global_temp.adult")
 
 
     print(df_.queryExecution.debug.codegen())
