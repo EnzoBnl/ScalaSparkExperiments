@@ -10,7 +10,7 @@ import java.util
 
 import com.enzobnl.sparkscalaexpe.playground.Sandbox.{df, spark}
 import org.apache.parquet.example.data.simple.NanoTime
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrameReader, SparkSession}
 //object Memoizer {
 //  def memo[R, A1](function: A1 => R): A1 => R = new Memoizer[R, A1, Any]().doMemoize(function)
 //  def memo[R, A1, A2](function: (A1, A2) => R): (A1, A2) => R = new Memoizer[R, A1, A2]().doMemoize(function)
@@ -37,50 +37,72 @@ import org.apache.spark.sql.SparkSession
 //}
 //TRAITS
 trait MemoizationCache{
-  def put(key: Int, value: Any): Unit
-  def get(key: Int): Any
-  def getOrElseUpdate(key: Int, value: => Any): Any
+  def put(key: Long, value: Any): Unit
+  def get(key: Long): Any
+  def getOrElseUpdate(key: Long, value: => Any): Any
+  def close(): Unit
 }
 
 trait Memoizer{
   def memo[I, R](f: I => R): I => R
   def memo[I1, I2, R](f: (I1, I2) => R): (I1, I2) => R
+  private var nextId = 0L
+  def getFunctionId(): Long = {
+    nextId += 1
+    nextId
+  }
 }
 trait CacheMemoizer extends Memoizer{
   val memoizationCache: MemoizationCache
 }
+
+
+
 trait NaiveCacheMemoizer extends CacheMemoizer{
   override def memo[I, R](f: I => R): I => R = {
     new Function1[I, R]{
-      lazy val cache: MemoizationCache = memoizationCache
-      override def apply(v1: I): R = cache.getOrElseUpdate(v1.hashCode() + f.hashCode(), f.apply(v1)).asInstanceOf[R]
+      val sharedMemoizationCache: MemoizationCache = memoizationCache
+      val id = getFunctionId()  // reference agnostic
+      override def apply(v1: I): R = sharedMemoizationCache.getOrElseUpdate((id, v1).hashCode(), f.apply(v1)).asInstanceOf[R]
+
+      override def finalize(): Unit = {
+        sharedMemoizationCache.close()
+        super.finalize()
+      }
     }
   }
   override def memo[I1, I2, R](f: (I1, I2) => R): (I1, I2) => R = {
     new Function2[I1, I2, R]{
-      lazy val cache: MemoizationCache = memoizationCache
-      override def apply(v1: I1, v2: I2): R = cache.getOrElseUpdate(v1.hashCode() + v2.hashCode() + f.hashCode(), f.apply(v1, v2)).asInstanceOf[R]
+      val sharedMemoizationCache: MemoizationCache = memoizationCache
+      val id = getFunctionId()
+      override def apply(v1: I1, v2: I2): R = sharedMemoizationCache.getOrElseUpdate((id, v1, v2).hashCode(), f.apply(v1, v2)).asInstanceOf[R]
+      override def finalize(): Unit = {
+        println("memoized function finalyzed" + sharedMemoizationCache.getClass)
+        sharedMemoizationCache.close()
+        super.finalize()
+      }
     }
   }
 }
 // PURE SCALA
 class WrappedMapMemoizationCache extends MemoizationCache{
-  lazy val map = scala.collection.mutable.Map[Int, Any]()
-  override def put(key: Int, value: Any): Unit = map.put(key, value)
-  override def get(key: Int): Any = map.get(key)
-  override def getOrElseUpdate(key: Int, value: => Any): Any = map.getOrElseUpdate(key, {println("Computed"); value})
+  lazy val map = {println("created MAP");scala.collection.mutable.Map[Long, Any]()}
+  override def put(key: Long, value: Any): Unit = map.put(key, value)
+  override def get(key: Long): Any = map.get(key)
+  override def getOrElseUpdate(key: Long, value: => Any): Any = map.getOrElseUpdate(key, {println("Computed"); value})
+  override def close(): Unit = {println("closed WrappedMapMemoizationCache")}
 }
 object PureScalaMemoizer extends NaiveCacheMemoizer{
-  override lazy val memoizationCache: MemoizationCache = new WrappedMapMemoizationCache()
+  override val memoizationCache: MemoizationCache = new WrappedMapMemoizationCache()
 }
 // Ignite
 class IgniteBasedMemoizationCache extends MemoizationCache{
   val icf = new IgniteConfiguration().setCacheConfiguration(new CacheConfiguration("ignite").setOnheapCacheEnabled(false))
   lazy val ignite = Ignition.getOrStart(icf)
-  lazy val igniteCache: IgniteCache[Int, Any] = ignite.getOrCreateCache[Int, Any]("ignite")
-  override def put(key: Int, value: Any): Unit = igniteCache.put(key, value)
-  override def get(key: Int): Any = igniteCache.get(key)
-  override def getOrElseUpdate(key: Int, value: => Any): Any = {
+  lazy val igniteCache: IgniteCache[Long, Any] = ignite.getOrCreateCache[Long, Any]("ignite")
+  override def put(key: Long, value: Any): Unit = igniteCache.put(key, value)
+  override def get(key: Long): Any = igniteCache.get(key)
+  override def getOrElseUpdate(key: Long, value: => Any): Any = {
     igniteCache.get(key) match{
       case v: Any => v
       case _ => {
@@ -91,13 +113,51 @@ class IgniteBasedMemoizationCache extends MemoizationCache{
       }
     }
   }
+  override def close(): Unit = {println("closed Ignite");ignite.close()}
 }
-object IgniteBasedMemoizer extends NaiveCacheMemoizer{
-  override lazy val memoizationCache: MemoizationCache = new IgniteBasedMemoizationCache()
+class IgniteBasedMemoizer extends NaiveCacheMemoizer{
+  override val memoizationCache: MemoizationCache = new IgniteBasedMemoizationCache()
 }
 
 object IgniteSb extends Runnable {
-  def bench(cache: IgniteCache[Int, String], cache2: scala.collection.mutable.Map[Int, String])= {
+
+  lazy val spark: SparkSession = QuickSparkSessionFactory.getOrCreate()
+  lazy val sc = spark.sparkContext
+  lazy val df = spark.createDataFrame(
+    Seq(("Thin", "Cell", 6000, 1),
+      ("Normal", "Tablet", 1500, 1),
+      ("Mini", "Tablet", 5500, 1),
+      ("Ultra thin", "Cell", 5000, 1),
+      ("Very thin", "Cell", 6000, 1),
+      ("Big", "Tablet", 2500, 2),
+      ("Bendable", "Cell", 3000, 2),
+      ("Foldable", "Cell", 3000, 2),
+      ("Pro", "Tablet", 4500, 2),
+      ("Pro2", "Tablet", 6500, 2))).toDF("product", "category", "revenue", "un")
+
+
+  override def run(): Unit = {
+    val f = (i: Int, s: String) => s.substring(i, i + 1)
+    val g = (i: Int, s: String) => s.substring(i - 1, i)
+    PureScalaMemoizer.memo(f)
+    spark.udf.register("f", PureScalaMemoizer.memo(f))
+    spark.udf.register("g", PureScalaMemoizer.memo(f))
+    df.selectExpr("f(1, category)", "f(1, category)").show()
+    val im =new IgniteBasedMemoizer()
+    spark.udf.register("f", im.memo(f))
+    spark.udf.register("g", im.memo(g))
+    Utils.time {df.selectExpr("f(1, category)", "g(1, category)").show()}
+    Utils.time {df.selectExpr("f(1, category)", "g(1, category)").show()}
+
+    //    spark.udf.register("f", PureScalaMemoizer.memo(g))
+//    spark.udf.register("g", PureScalaMemoizer.memo(g))
+//    df.selectExpr("g(1+1, category)", "g(1, category)").show()
+    spark.stop()
+    System.gc()
+  }
+}
+/*
+def bench(cache: IgniteCache[Int, String], cache2: scala.collection.mutable.Map[Int, String])= {
 
     for (i <- 1 to 10) {
       println(Utils.time {cache.put(i, s"value-$i")})
@@ -142,31 +202,8 @@ object IgniteSb extends Runnable {
     spark.udf.register("pt", printTime)
     df.selectExpr("hash(revenue+un)", "pt()").show()
   }
-  lazy val spark: SparkSession = QuickSparkSessionFactory.getOrCreate()
-  lazy val sc = spark.sparkContext
-  lazy val df = spark.createDataFrame(
-    Seq(("Thin", "Cell", 6000, 1),
-      ("Normal", "Tablet", 1500, 1),
-      ("Mini", "Tablet", 5500, 1),
-      ("Ultra thin", "Cell", 5000, 1),
-      ("Very thin", "Cell", 6000, 1),
-      ("Big", "Tablet", 2500, 2),
-      ("Bendable", "Cell", 3000, 2),
-      ("Foldable", "Cell", 3000, 2),
-      ("Pro", "Tablet", 4500, 2),
-      ("Pro2", "Tablet", 6500, 2))).toDF("product", "category", "revenue", "un")
+*/
 
-
-
-  override def run(): Unit = {
-    val f = (i: Int, s: String)=> s.substring(i, i+1)
-    val g = (i: Int, s: String)=> s.substring(i-1, i)
-    spark.udf.register("f", PureScalaMemoizer.memo(f))
-    spark.udf.register("g", PureScalaMemoizer.memo(g))
-    df.selectExpr("f(1, category)", "g(1, category)").show()
-    spark.udf.register("f", IgniteBasedMemoizer.memo(f))
-    spark.udf.register("g", IgniteBasedMemoizer.memo(g))
-    df.selectExpr("f(1, category)", "g(1, category)").show()
 //    val icf = new IgniteConfiguration().setCacheConfiguration(new CacheConfiguration("ignite").setOnheapCacheEnabled(false))
 //    val ignite = Ignition.getOrStart(icf)
 //    println("A")
@@ -179,9 +216,6 @@ object IgniteSb extends Runnable {
 //    println(Utils.time {cache.get(1)})
 //
 //    val cache2: scala.collection.mutable.Map[Int, String] = scala.collection.mutable.Map[Int, String]()
-
-  }
-}
 
 
 //
