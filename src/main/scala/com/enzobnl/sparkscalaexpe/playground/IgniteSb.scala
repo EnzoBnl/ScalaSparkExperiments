@@ -8,7 +8,6 @@ import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder
 import java.util
 
-import com.enzobnl.sparkscalaexpe.playground.Sandbox.{df, spark}
 import org.apache.parquet.example.data.simple.NanoTime
 import org.apache.spark.sql.{DataFrameReader, SparkSession}
 //object Memoizer {
@@ -85,14 +84,14 @@ trait NaiveCacheMemoizer extends CacheMemoizer{
   }
 }
 // PURE SCALA
-class WrappedMapMemoizationCache extends MemoizationCache{
+class WrappedMapMemoizationCache extends MemoizationCache{  // Adapter pattern
   lazy val map = {println("created MAP");scala.collection.mutable.Map[Long, Any]()}
   override def put(key: Long, value: Any): Unit = map.put(key, value)
   override def get(key: Long): Any = map.get(key)
   override def getOrElseUpdate(key: Long, value: => Any): Any = map.getOrElseUpdate(key, {println("Computed"); value})
   override def close(): Unit = {println("closed WrappedMapMemoizationCache")}
 }
-object PureScalaMemoizer extends NaiveCacheMemoizer{
+object PureScalaMemoizer extends NaiveCacheMemoizer{ // TODO replace this by implicit or DI
   override val memoizationCache: MemoizationCache = new WrappedMapMemoizationCache()
 }
 // Ignite
@@ -115,9 +114,10 @@ class IgniteBasedMemoizationCache extends MemoizationCache{
   }
   override def close(): Unit = {println("closed Ignite");ignite.close()}
 }
-class IgniteBasedMemoizer extends NaiveCacheMemoizer{
+object IgniteBasedMemoizer extends NaiveCacheMemoizer{
   override val memoizationCache: MemoizationCache = new IgniteBasedMemoizationCache()
 }
+
 
 object IgniteSb extends Runnable {
 
@@ -139,19 +139,50 @@ object IgniteSb extends Runnable {
   override def run(): Unit = {
     val f = (i: Int, s: String) => s.substring(i, i + 1)
     val g = (i: Int, s: String) => s.substring(i - 1, i)
-    PureScalaMemoizer.memo(f)
-    spark.udf.register("f", PureScalaMemoizer.memo(f))
-    spark.udf.register("g", PureScalaMemoizer.memo(f))
-    df.selectExpr("f(1, category)", "f(1, category)").show()
-    val im =new IgniteBasedMemoizer()
-    spark.udf.register("f", im.memo(f))
-    spark.udf.register("g", im.memo(g))
-    Utils.time {df.selectExpr("f(1, category)", "g(1, category)").show()}
-    Utils.time {df.selectExpr("f(1, category)", "g(1, category)").show()}
+    import IgniteBasedMemoizer.memo
+//    lazy val facto: Int => Int = memo((n: Int) => if(n<=1) 1 else n*memo(facto)(n-1))
+//    println(facto(6))
+    var i = 0
+    lazy val fibo: Int => Int = n => {i += 1; println(f"fibo no memo run$i");n match {
+      case 0 => 0
+      case 1 => 1
+      case _ => fibo(n-1) + fibo(n-2)}}
+    Utils.time(println(fibo(20)))
+//    i = 0
+//    lazy val mfibo2: Int => Int = memo(fibo)
+//    Utils.time(println(mfibo2(30)))
+    i = 0
+    lazy val mfibo: Int => Int = memo(n => {i += 1; println(f"fibo IGNITE run$i"); n match {
+      case 0 => 1
+      case 1 => 1
+      case _ => mfibo(n-1) + mfibo(n-2)}})
+    Utils.time(println(mfibo(1)))
+    Utils.time(println(mfibo(20)))
+    i = 0
+    lazy val mfibo2: Int => Int = PureScalaMemoizer.memo(n => {i += 1; println(f"fibo PureScalaMemoizer run$i"); n match {
+      case 0 => 0
+      case 1 => 1
+      case _ => mfibo2(n-1) + mfibo2(n-2)}})
+    Utils.time(println(mfibo2(20)))
 
-    //    spark.udf.register("f", PureScalaMemoizer.memo(g))
-//    spark.udf.register("g", PureScalaMemoizer.memo(g))
-//    df.selectExpr("g(1+1, category)", "g(1, category)").show()
+    //    Utils.time(println(mfibo(100)))
+//    i = 0
+//    lazy val memoizedFib: Int => Int = Memo.mutableHashMapMemo { n => i += 1; println(f"fibo SCALAZ run$i"); n match{
+//      case 0 => 0
+//      case 1 => 1
+//      case _ => memoizedFib(n - 2) + memoizedFib(n - 1)}
+//    }
+//    Utils.time(println(memoizedFib(20)))
+
+
+//    System.exit(0)
+    spark.udf.register("f", mfibo2)
+    Utils.time {spark.createDataFrame(for(i <- 1 to 21) yield Tuple1(i)).toDF("n").selectExpr("f(n)").show()}
+    Utils.time {spark.createDataFrame(for(i <- 1 to 21) yield Tuple1(i)).toDF("n").selectExpr("f(n)").show()}
+
+    //    val im = new IgniteBasedMemoizer()
+    spark.udf.register("f", mfibo)
+    Utils.time {spark.createDataFrame(for(i <- 1 to 21) yield Tuple1(i)).toDF("n").selectExpr("f(n)").show()}
     spark.stop()
     System.gc()
   }

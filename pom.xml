@@ -68,6 +68,12 @@
             <artifactId>ignite-core</artifactId>
             <version>2.7.5</version>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/org.scalaz/scalaz-core -->
+        <dependency>
+            <groupId>org.scalaz</groupId>
+            <artifactId>scalaz-core_2.11</artifactId>
+            <version>7.3.0-M30</version>
+        </dependency>
 
     </dependencies>
 
