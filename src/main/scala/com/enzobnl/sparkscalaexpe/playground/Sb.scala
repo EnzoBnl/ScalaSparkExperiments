@@ -119,7 +119,7 @@ for(_<-(1 to 45))
       .collect()(0)))
   // .toRdd
     println("toRdd")
-    Utils.time(rdd = dfs(3).withColumn("i", monotonically_increasing_id()).select("i").queryExecution.toRdd())
+    Utils.time(rdd = dfs(3).withColumn("i", monotonically_increasing_id()).select("i").queryExecution.toRdd)
     Utils.time(println(rdd.asInstanceOf[RDD[InternalRow]].count()))
     Utils.time(println(rdd.asInstanceOf[RDD[InternalRow]]
       .map((row: InternalRow) => InternalRow.fromSeq(Seq(row.getLong(0)+10, row.getLong(0)-10)))
