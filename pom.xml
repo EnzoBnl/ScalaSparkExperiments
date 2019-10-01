@@ -57,11 +57,11 @@
             <version>0.3.11</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/embedded-kafka/embedded-kafka -->
-        <dependency>
-            <groupId>embedded-kafka</groupId>
-            <artifactId>embedded-kafka</artifactId>
-            <version>0.6.0</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>embedded-kafka</groupId>-->
+<!--            <artifactId>embedded-kafka</artifactId>-->
+<!--            <version>0.6.0</version>-->
+<!--        </dependency>-->
         <!-- https://mvnrepository.com/artifact/org.apache.ignite/ignite-core -->
         <dependency>
             <groupId>org.apache.ignite</groupId>
@@ -74,6 +74,12 @@
             <artifactId>scalaz-core_2.11</artifactId>
             <version>7.3.0-M30</version>
         </dependency>
+        <!-- https://mvnrepository.com/artifact/graphframes/graphframes -->
+<!--        <dependency>-->
+<!--            <groupId>graphframes</groupId>-->
+<!--            <artifactId>graphframes</artifactId>-->
+<!--            <version>0.7.0-spark2.4-s_2.11</version>-->
+<!--        </dependency>-->
 
     </dependencies>
 

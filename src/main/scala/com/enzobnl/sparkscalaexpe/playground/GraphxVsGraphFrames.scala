@@ -8,20 +8,20 @@ import org.apache.spark.graphx.GraphLoader
 
 import scala.util.Random
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
 
 
-object Graphx extends Runnable {
+object GraphxVsGraphFrames extends Runnable {
 
   lazy val spark: SparkSession = QuickSparkSessionFactory.getOrCreate()
 
   override def run(): Unit = {
     val sc = spark.sparkContext
     // Load the edges as a graph
-    val sparkPath = "C:/Prog/Scala/Hadoop/Spark/Master2Thesis/spark_fork/spark/"
+    val sparkPath = "/home/enzo/Prog/spark/"
     val graph = GraphLoader.edgeListFile(sc, sparkPath + "data/graphx/followers.txt")
     // Run PageRank
     val ranks = graph.pageRank(0.0001).vertices
