@@ -3,6 +3,6 @@ package com.enzobnl.sparkscalaexpe
 import com.enzobnl.sparkscalaexpe.playground._
 
 object Main extends App {
-  val runnables: Seq[Runnable] = Seq(GraphxVsGraphFrames)
+  val runnables: Seq[Runnable] = Seq(GraphxVsGraphFramesPageRanks)
   for(torun <- runnables) torun.run
 }

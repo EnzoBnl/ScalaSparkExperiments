@@ -14,7 +14,7 @@ import org.apache.spark.sql.types.StructType
 import org.graphframes.GraphFrame
 
 
-object GraphxVsGraphFrames extends Runnable {
+object GraphxVsGraphFramesPageRanks extends Runnable {
   final val RESET_PROB: Double = 0.15
   final val N_ITER: Int = 10
   lazy val spark: SparkSession = QuickSparkSessionFactory.getOrCreate()
@@ -53,7 +53,9 @@ object GraphxVsGraphFrames extends Runnable {
       .load(sparkPath + "data/graphx/users.txt")
       .toDF("id", "pseudo", "name")
 
-    val graph: GraphFrame = GraphFrame.fromEdges(edges)
+    val graph: GraphFrame = GraphFrame.fromEdges(edges.repartition(1))
+    graph.vertices.repartition(1)
+    graph.edges.repartition(1)
     val pageRankResult: GraphFrame = graph.pageRank.resetProbability(RESET_PROB).maxIter(N_ITER).run()
     import spark.implicits._
     pageRankResult
