@@ -15,7 +15,6 @@ object DatasetVsDataFrame extends Runnable {
   override def run(): Unit = {
     val sc = spark.sparkContext
     // Load the edges as a graph
-    val sparkPath = "/home/enzo/Prog/spark/"
     println("# DATAFRAME")
     val df = spark.read
       .format("csv")
@@ -26,16 +25,16 @@ object DatasetVsDataFrame extends Runnable {
         StructField("pseudo", StringType, true),
         StructField("name", StringType, true))))
 //      .option("inferSchema", "true")
-      .load("/home/enzo/Data/sofia-air-quality-dataset/2019-05_bme280sof.csv")
+      .load("/home/enzo/Prog/spark/data/graphx/users.txt")
       .toDF("id", "pseudo", "name")
       .selectExpr("*", "substr(pseudo, 2) AS sub")
       .filter("sub LIKE 'a%' ")
 //    df.show()
     df.queryExecution.debug.codegen()
-    Utils.time {val _0: RDD[Row] = df.rdd}
-    Utils.time {val _1: Array[Row] = df.rdd.collect()}
-      Utils.time {val _2: RDD[InternalRow] = df.queryExecution.toRdd}
-        Utils.time {val _3: Array[InternalRow] = df.queryExecution.toRdd.collect()}
+//    Utils.time {val _0: RDD[Row] = df.rdd}
+//    Utils.time {val _1: Array[Row] = df.rdd.collect()}
+//      Utils.time {val _2: RDD[InternalRow] = df.queryExecution.toRdd}
+//        Utils.time {val _3: Array[InternalRow] = df.queryExecution.toRdd.collect()}
 
     println("# DATASET")
 
@@ -49,7 +48,7 @@ object DatasetVsDataFrame extends Runnable {
         StructField("pseudo", StringType, true),
         StructField("name", StringType, true))))
       //      .option("inferSchema", "true")
-      .load("/home/enzo/Data/sofia-air-quality-dataset/2019-05_bme280sof.csv")
+      .load("/home/enzo/Prog/spark/data/graphx/users.txt")
       //      .load(sparkPath + "data/graphx/users.txt")
       .toDF("id", "pseudo", "name")
       .as[User]
@@ -57,10 +56,15 @@ object DatasetVsDataFrame extends Runnable {
       .filter((extendedUser: (Int, String, String, String)) => extendedUser._4.startsWith("a"))
 //    ds.show()
     ds.queryExecution.debug.codegen()
+    ds.collect()
+    df.collect()
+//    Utils.time {val __0: RDD[(Int, String, String, String)] = ds.rdd}
+//    Utils.time {val __1: Array[(Int, String, String, String)] = ds.rdd.collect()}
+//    Utils.time {val __2: RDD[InternalRow] = ds.queryExecution.toRdd}
+//    Utils.time {val __3: Array[InternalRow] = ds.queryExecution.toRdd.collect()}
+    while(true){
+      Thread.sleep(1000)
+    }
 
-    Utils.time {val __0: RDD[(Int, String, String, String)] = ds.rdd}
-    Utils.time {val __1: Array[(Int, String, String, String)] = ds.rdd.collect()}
-    Utils.time {val __2: RDD[InternalRow] = ds.queryExecution.toRdd}
-    Utils.time {val __3: Array[InternalRow] = ds.queryExecution.toRdd.collect()}
   }
 }
