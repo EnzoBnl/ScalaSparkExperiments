@@ -26,7 +26,7 @@ import org.apache.spark.sql.functions._
  * revenue_difference.alias("revenue_difference"))
  */
 object Sb3 extends Runnable {
-  final val DANGLING_FACTOR: Double = 0.85
+  final val DAMPING_FACTOR: Double = 0.85
   var N_ITER: Int = 3
   lazy val spark: SparkSession = SparkSession
     .builder
@@ -98,7 +98,7 @@ object Sb3 extends Runnable {
           "outer"
         )
           .drop("dst")
-          .withColumn("PR", lit(1 - DANGLING_FACTOR) + lit(DANGLING_FACTOR) * expr("ifnull(sumSent, 0)"))
+          .withColumn("PR", lit(1 - DAMPING_FACTOR) + lit(DAMPING_FACTOR) * expr("ifnull(sumSent, 0)"))
           .drop("sumSent").cache()
       if (verbose) vertices.show()
       //              .groupBy("dst")

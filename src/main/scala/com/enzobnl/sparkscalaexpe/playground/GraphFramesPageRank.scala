@@ -1,12 +1,16 @@
-package com.enzobnl.sparkscalaexpe.playground
+package org.apache.spark.sql
 
 import com.enzobnl.sparkscalaexpe.playground.GraphxVsGraphFramesPageRanks.{N_ITER, RESET_PROB, execGraphXNoCache, spark}
-import com.enzobnl.sparkscalaexpe.playground.Sb3.{DANGLING_FACTOR, N_ITER}
+import com.enzobnl.sparkscalaexpe.playground.Sb3.{DAMPING_FACTOR, N_ITER}
 import com.enzobnl.sparkscalaexpe.util.Utils
 import org.apache.spark.graphx.GraphLoader
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.graphframes.GraphFrame
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, StructField, StructType}
 import org.graphframes.lib.AggregateMessages
 
 object GraphFramesPageRank extends Runnable {
@@ -72,7 +76,7 @@ object GraphFramesPageRank extends Runnable {
       .outDegrees
       .withColumn(
         "id_deg_zero",
-        array(  // TODO: struct
+        array( // TODO: struct
           col("id"),
           col("outDegree")
         ).alias("id_deg_zero"))
@@ -135,7 +139,9 @@ object GraphFramesPageRank extends Runnable {
         edges
       )
       println("deb ITER n°", i)
-      if(/*i%3==0 &&*/ i!=N_ITER)Utils.time {graph.vertices.repartition(12).foreachPartition(_ => {})}
+      if ( /*i%3==0 &&*/ i != N_ITER) Utils.time {
+        graph.vertices.cache().foreachPartition(_ => {})
+      }
       println("fin ITER n°", i)
     }
     println("PR 2 END")
@@ -154,7 +160,7 @@ object GraphFramesPageRank extends Runnable {
       .outDegrees.repartition(12)
       .withColumn(
         "id_deg_zero",
-        array(  // TODO: struct
+        array( // TODO: struct
           col("id"),
           col("outDegree")
         ).alias("id_deg_zero"))
@@ -208,8 +214,8 @@ object GraphFramesPageRank extends Runnable {
         .agg(sum(am.msg).*(d).+(1 - d).as("PR"))
         .repartition(12)
 
-//      println(graph.edges.rdd.partitions.length)
-//      println(agg.rdd.partitions.length)
+      //      println(graph.edges.rdd.partitions.length)
+      //      println(agg.rdd.partitions.length)
 
       graph = GraphFrame(
         agg
@@ -220,18 +226,21 @@ object GraphFramesPageRank extends Runnable {
         ,
         edges
       )
-//      println(graph.vertices.rdd.partitions.length)
+      //      println(graph.vertices.rdd.partitions.length)
 
       println("deb ITER n°", i)
-//      if(/*i%3==0 &&*/ i!=N_ITER)Utils.time {graph.vertices.repartition(12).foreachPartition(_ => {})}
+      //      if(/*i%3==0 &&*/ i!=N_ITER)Utils.time {graph.vertices.repartition(12).foreachPartition(_ => {})}
       println("fin ITER n°", i)
     }
     println("PR 2 END")
     graph.vertices.select(col("id"), col("PR"))
   }
-  def PR(edges: DataFrame, nIter: Int = N_ITER, verbose: Boolean = false): Unit = {
+
+  def PR(edges: DataFrame, nIter: Int = N_ITER, processingBatchSize: Int = 5, cutProcessingAndLineage: String = "checkpoint"): Unit = {
+    println("Launch PR with ", N_ITER, processingBatchSize, cutProcessingAndLineage)
     import spark.implicits._
     edges.cache()
+
     val ids = edges
       .select(col("src").as("id"))
       .union(edges.select(col("dst").as("id")))
@@ -247,81 +256,223 @@ object GraphFramesPageRank extends Runnable {
       .withColumn("outDegree", expr("ifnull(count, 0)"))
       .drop("count")
       .withColumn("PR", lit(1))
-      .cache()
+
+    var cachedDFs: Seq[DataFrame] = Seq[DataFrame]()
+
+    vertices.cache()
+    cachedDFs = cachedDFs :+ vertices
 
     for (i <- 1 to nIter) {
-      //          edges.as("a").join(
       val enrichedEdges =
-        edges.as("c").join(
+        edges.join(
           vertices
             .withColumn("toSend", $"PR" / $"outDegree")
-            .select("id", "toSend").as("d"),
-          $"c.src" === $"d.id",
+            .select("id", "toSend"),
+          $"src" === $"id",
           "inner"
         )
-      if (verbose) enrichedEdges.show()
-
       val summingShipments = enrichedEdges
         .groupBy("dst").sum("toSend")
         .withColumnRenamed("sum(toSend)", "sumSent")
-      if (verbose) summingShipments.show()
 
-      vertices =
-        summingShipments.as("c").join(
-          vertices.as("d"),
-          $"c.dst" === $"d.id",
+      val updatedVertices =
+        summingShipments.join(
+          vertices,
+          $"dst" === $"id",
           "outer"
         )
           .drop("dst")
-          .withColumn("PR", lit(1 - DANGLING_FACTOR) + lit(DANGLING_FACTOR) * expr("ifnull(sumSent, 0)"))
-          .drop("sumSent").cache()
-      if (verbose) vertices.show()
+          .withColumn("PR", lit(1 - DAMPING_FACTOR) + lit(DAMPING_FACTOR) * expr("ifnull(sumSent, 0)"))
+          .drop("sumSent")
+
+      vertices =
+        Utils.time {
+          cutProcessingAndLineage match {
+            case "checkpoint" => {
+              if (i % processingBatchSize == 0 && i != nIter) {
+                println("PR materializing data, iter n°", i, cutProcessingAndLineage)
+                vertices = updatedVertices.cache().localCheckpoint()
+                println("PR materialized data, iter n°", i, cutProcessingAndLineage)
+                cachedDFs = cachedDFs :+ updatedVertices
+                cachedDFs.foreach(_.unpersist())
+                cachedDFs = Seq[DataFrame]()
+                vertices.cache()
+                cachedDFs = cachedDFs :+ vertices
+                vertices
+              }
+              else {
+                vertices = updatedVertices
+                vertices.cache()
+                cachedDFs = cachedDFs :+ vertices
+                vertices
+              }
+            }
+            case "toRddAndForEach" => {
+              if (i % processingBatchSize == 0 && i != nIter) {
+                println("PR materializing data, iter n°", i, cutProcessingAndLineage)
+                updatedVertices.cache().foreachPartition(_ => ()) // never uncached the nIter/processingBatchSize updatedVertices DFs
+                println("PR materialized data, iter n°", i, cutProcessingAndLineage)
+                cachedDFs = cachedDFs :+ vertices
+              }
+//              vertices.explain(true)
+              vertices = DataFrameUtil.createFromInternalRows(updatedVertices.sparkSession, updatedVertices.schema, updatedVertices.queryExecution.toRdd)
+//              vertices.explain(true)
+
+              cachedDFs.foreach(_.unpersist())
+              cachedDFs = Seq[DataFrame]()
+              cachedDFs = cachedDFs :+ vertices
+              vertices
+            }
+          }
+        }
+
+
     }
 
     vertices.filter($"id" === 1001866 || $"id" <= 7).show(10)
+    cachedDFs.foreach(_.unpersist())
+    edges.unpersist()
+
+    println("Close PR with ", N_ITER, processingBatchSize, cutProcessingAndLineage)
+
   }
+
+
+  /**
+   * Compute PageRank original iterative algorithm
+   *  Bench script: scm.Plot(2, "10 iterations of PageRank, 20M links, 6M nodes, RAM >> size (0.7Go), 12 Threads CPU").add(x=["custom DF implem", "GraphX", "GF's AggregateMessages", "GraphFrames"], y=[79000,74445*10/3,196222*10/3,600000*10/3], marker="bar"); plt.show()
+   * @param e: first Column represent sources of links and second one represents their
+   * @param nIter
+   * @param d
+   * @return
+   */
+  def sqlPR(e: DataFrame, nIter: Int = N_ITER, d: Double = DAMPING_FACTOR): (DataFrame, Seq[DataFrame]) = {
+    require(e.schema.fields.map(_.name).contains("src"), "e must contain an src col")
+    require(e.schema.fields.map(_.name).contains("dst"), "e must contain a dst col")
+    require(e.schema(e.schema.getFieldIndex("src").get).dataType == LongType, "src col must be LonType")
+    require(e.schema(e.schema.getFieldIndex("dst").get).dataType == LongType, "dst col must be LonType")
+    require(nIter > 0, "nIter must be greater than zero")
+
+    // src, dst
+    val edges = e.toDF("src", "dst").cache()
+
+    // id
+    val ids = edges.selectExpr("src as id")
+      .union(edges.selectExpr("dst as id"))
+      .distinct()
+
+    // id, outDegree
+    val idsAndOutDegrees = ids
+      .join(
+        edges.groupBy("src").count().withColumnRenamed("count()", "count"),
+        ids("id") === edges("src"),
+        "outer")
+      .withColumn("outDegree", expr("ifnull(count, 0)"))
+      .cache()
+
+    // id, PRtoSend
+    var vertices = idsAndOutDegrees.withColumn("PRtoSend", lit(1) / col("outDegree"))
+
+    for (_ <- 1 to nIter) {
+
+      // src, dst, PRtoSend
+      val weightedEdges = edges.join(vertices, edges("src") === vertices("id"),  "inner").drop("id")
+
+      // dst, PRsumSent
+      val summingShipments = weightedEdges
+        .groupBy("dst").sum("PRtoSend")
+        .withColumnRenamed("sum(PRtoSend)", "PRsumSent")
+
+      // id, PRtoSend
+      val updatedVertices = summingShipments
+        .join(idsAndOutDegrees,
+          summingShipments("dst") === idsAndOutDegrees("id"),
+          "outer")
+        .withColumn("PRtoSend", (lit(1 - d) + lit(d) * expr("ifnull(PRsumSent, 0)")) / col("outDegree"))
+        .select("id", "PRtoSend")
+
+      // cuts DataFrame plan (but not spark lineage like a .checkpoint()
+      //      vertices.explain(true)
+      //      == Physical Plan ==
+      //        Scan ExistingRDD[id#2289,outDegree#2290L,PR#2291]
+      vertices = Dataset.ofRows(spark, LogicalRDD(updatedVertices.schema.toAttributes, updatedVertices.queryExecution.toRdd)(spark))
+    }
+    vertices = vertices.join(idsAndOutDegrees,
+      vertices("id") === idsAndOutDegrees("id"),
+      "outer")
+      .withColumn("PR", col("PRtoSend")*col("outDegree"))
+      .select(vertices("id"), col("PR"))
+    (vertices, Seq(edges, ids))
+  }
+
+  object DataFrameUtil {
+    /**
+     * Creates a DataFrame out of RDD[InternalRow] that you can get using `df.queryExection.toRdd`
+     */
+    def createFromInternalRows(sparkSession: SparkSession, schema: StructType, rdd: RDD[InternalRow]): DataFrame = {
+      val logicalPlan = LogicalRDD(schema.toAttributes, rdd)(sparkSession)
+      Dataset.ofRows(sparkSession, logicalPlan)
+    }
+  }
+
   def newAlgo(edgesPath: String, verticesSep: String = ",", verticesPath: Option[String], verticesCols: Seq[String]): Unit = {
 
     val edges = spark.read
       .format("csv")
       .option("delimiter", " ")
+      .schema(StructType(Seq(StructField("src", LongType), StructField("dst", LongType))))
       .load(edgesPath)
       .toDF("src", "dst")
       .cache()
 
 
-
-
-    Utils.time {
-      PR(edges)
-    }
-
-//    Utils.time {
-//      pageRankIterJoinsBasedArray(edges).show(10)
+//      Utils.time {
+//      PR (edges, N_ITER, 5, "checkpoint")
 //    }
 
-//    Utils.time {
-//      pageRankIterAggregateMessagesArray(edges).show(10)
+//      Utils.time {
+//      PR (edges, N_ITER, 5, "toRddAndForEach")
 //    }
-//val vertices = spark.read
-//  .format("csv")
-//  .option("delimiter", verticesSep)
-//  .load(verticesPath.get)
-//  .toDF(verticesCols: _*)
-//  .withColumn("PR", lit(1))
-//  .cache()
 //    Utils.time {
-//      pageRankIterAggregateMessagesJoins(vertices, edges)
-//        .vertices
-//        .show(10)
+//      PR(edges, N_ITER, 100, "toRddAndForEach")
 //    }
+//    Utils.time {
+//      sqlPR(edges, N_ITER)
+//    }
+//    Utils.time {
+//      val res = sqlPR(edges, N_ITER)
+//      res._1.filter(col("id") === 1001866 || col("id") <= 7).show(10)
+//      res._2.foreach(_.unpersist())
+//    }
+//    println("WAS CUSTOM")
+
+//        Utils.time {
+//          pageRankIterJoinsBasedArray(edges).show(10)
+//        }
+
+        Utils.time {
+          pageRankIterAggregateMessagesArray(edges).show(10)
+        }
+    println("WAS AggregateMessages")
+    //val vertices = spark.read
+    //  .format("csv")
+    //  .option("delimiter", verticesSep)
+    //  .load(verticesPath.get)
+    //  .toDF(verticesCols: _*)
+    //  .withColumn("PR", lit(1))
+    //  .cache()
+    //    Utils.time {
+    //      pageRankIterAggregateMessagesJoins(vertices, edges)
+    //        .vertices
+    //        .show(10)
+    //    }
   }
 
   def execGraphXNoCache(edgesPath: String, verticesSep: String = ",", verticesPath: Option[String]): Array[(Long, Double)] = {
     val sc = spark.sparkContext
     val graph = GraphLoader.edgeListFile(sc, edgesPath)
     val ranks = graph.staticPageRank(N_ITER, RESET_PROB).vertices
-    ranks.filter(id => id._1 == 1001866 || id._1 <=7).take(100)
+    ranks.filter(id => id._1 == 1001866 || id._1 <= 7).take(100)
   }
 
   def execGraphFrameNoCache(edgesPath: String, verticesSep: String = ",", verticesPath: Option[String], verticesCols: Seq[String]): Unit = {
@@ -331,12 +482,15 @@ object GraphFramesPageRank extends Runnable {
     val edges = spark.read
       .format("csv")
       .option("delimiter", " ")
+      .schema(StructType(Seq(StructField("src", LongType), StructField("dst", LongType))))
       .load(edgesPath)
       .toDF("src", "dst")
 
     val graph: GraphFrame = GraphFrame.fromEdges(edges)
     val pageRankResult: GraphFrame = graph.pageRank.resetProbability(RESET_PROB).maxIter(N_ITER).run()
+
     import spark.implicits._
+
     pageRankResult
       .vertices
       //      .join(vertices, Seq("id", "id"))
@@ -346,33 +500,43 @@ object GraphFramesPageRank extends Runnable {
   }
 
   override def run(): Unit = {
-    for (n_ITER <- Seq(3, 6, 12, 24, 48)) {
+    for (n_ITER <- Seq(3, 10)) {
       N_ITER = n_ITER
-      println(Utils.time {
-        newAlgo(
-          "/home/enzo/Prog/spark/data/graphx/followers.txt",
-          ",",
-          Some("/home/enzo/Prog/spark/data/graphx/users.txt"),
-          Seq("id", "pseudo", "name")
-        )
-      })
-      println(Utils.time {
-        execGraphXNoCache(
-          "/home/enzo/Prog/spark/data/graphx/followers.txt",
-          "\t",
-          Some("/home/enzo/Prog/spark/data/graphx/users.txt")
-        ).toSeq
-      })
+      println("N_ITER=", N_ITER)
+
 
 //      println(Utils.time {
-//        execGraphFrameNoCache(
+//        newAlgo(
 //          "/home/enzo/Prog/spark/data/graphx/followers.txt",
 //          ",",
 //          Some("/home/enzo/Prog/spark/data/graphx/users.txt"),
 //          Seq("id", "pseudo", "name")
 //        )
 //      })
-
+//            println(Utils.time {
+//              execGraphXNoCache(
+//                "/home/enzo/Prog/spark/data/graphx/followers.txt",
+//                "\t",
+//                Some("/home/enzo/Prog/spark/data/graphx/users.txt")
+//              ).toSeq
+//            })
+//
+//            println(Utils.time {
+//              execGraphFrameNoCache(
+//                "/home/enzo/Prog/spark/data/graphx/followers.txt",
+//                ",",
+//                Some("/home/enzo/Prog/spark/data/graphx/users.txt"),
+//                Seq("id", "pseudo", "name")
+//              )
+//            })
+      println(Utils.time {
+        newAlgo(
+          "/home/enzo/Prog/spark/data/graphx/followers.txt",
+          "\t",
+          Some("/home/enzo/Prog/spark/data/graphx/followers.txt"),
+          Seq("id", "pseudo")
+        )
+      })
       println(Utils.time {
         newAlgo(
           "/home/enzo/Data/linkedin.edges",
@@ -381,24 +545,25 @@ object GraphFramesPageRank extends Runnable {
           Seq("id", "pseudo")
         )
       })
-      println(Utils.time {
-        execGraphXNoCache(
-          "/home/enzo/Data/linkedin.edges",
-          "\t",
-          Some("/home/enzo/Data/linkedin.nodes")
-        ).toSeq
-      })
+//            println(Utils.time {
+//              execGraphXNoCache(
+//                "/home/enzo/Data/linkedin.edges",
+//                "\t",
+//                Some("/home/enzo/Data/linkedin.nodes")
+//              ).toSeq
+//            })
+//      println("WAS GraphX")
+//
 
-
-
-//      println(Utils.time {
-//        execGraphFrameNoCache(
-//          "/home/enzo/Data/linkedin.edges",
-//          "\t",
-//          Some("/home/enzo/Data/linkedin.nodes"),
-//          Seq("id", "pseudo")
-//        )
-//      })
+            println(Utils.time {
+              execGraphFrameNoCache(
+                "/home/enzo/Data/linkedin.edges",
+                "\t",
+                Some("/home/enzo/Data/linkedin.nodes"),
+                Seq("id", "pseudo")
+              )
+            })
+      println("WAS GraphFrames")
     }
     while (true) {
       Thread.sleep(1000)
