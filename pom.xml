@@ -24,25 +24,33 @@
             </plugin>
         </plugins>
     </build>
+
+    <repositories>
+        <repository>
+            <id>SparkPackages</id>
+            <url>https://dl.bintray.com/spark-packages/maven</url>
+        </repository>
+    </repositories>
+
     <dependencies>
 
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_2.11</artifactId>
-            <version>2.4.0</version>
+            <version>2.4.4</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_2.11</artifactId>
-            <version>2.4.0</version>
+            <version>2.4.4</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-mllib -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-mllib_2.11</artifactId>
-            <version>2.4.0</version>
+            <version>2.4.4</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/org.scala-lang/scala-library -->
         <dependency>
@@ -74,13 +82,45 @@
             <artifactId>scalaz-core_2.11</artifactId>
             <version>7.3.0-M30</version>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.soundcloud/spark-pagerank -->
+        <dependency>
+            <groupId>com.soundcloud</groupId>
+            <artifactId>spark-pagerank_2.11</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.twitter/algebird-bijection -->
+        <dependency>
+            <groupId>com.twitter</groupId>
+            <artifactId>algebird-bijection_2.11</artifactId>
+            <version>0.11.0</version>
+        </dependency>
+
+
         <!-- https://mvnrepository.com/artifact/graphframes/graphframes -->
-<!--        <dependency>-->
-<!--            <groupId>graphframes</groupId>-->
-<!--            <artifactId>graphframes</artifactId>-->
-<!--            <version>0.7.0-spark2.4-s_2.11</version>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>graphframes</groupId>
+            <artifactId>graphframes</artifactId>
+            <version>0.7.0-spark2.4-s_2.11</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/ml.sparkling/sparkling-graph-api -->
+        <dependency>
+            <groupId>ml.sparkling</groupId>
+            <artifactId>sparkling-graph-operators_2.11</artifactId>
+            <version>0.0.7</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/io.delta/delta-core -->
+        <dependency>
+            <groupId>io.delta</groupId>
+            <artifactId>delta-core_2.11</artifactId>
+            <version>0.4.0</version>
+        </dependency>
+
     </dependencies>
+
+
 
 
 </project>

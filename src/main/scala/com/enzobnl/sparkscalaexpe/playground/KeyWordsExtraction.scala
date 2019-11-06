@@ -1,84 +1,13 @@
 package com.enzobnl.sparkscalaexpe.playground
 
 import org.apache.spark.ml.feature.{HashingTF, IDF}
-import org.apache.spark.ml.{Pipeline, PipelineStage}
+import org.apache.spark.ml.{Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 
 import scala.io.Source
 
-/**
- * import sys
- * from pyspark.sql.window import Window
- * import pyspark.sql.functions as func
- * windowSpec = \
- * Window
- * .partitionBy(df['category']) \
- * .orderBy(df['revenue'].desc()) \
- * .rangeBetween(-sys.maxsize, sys.maxsize)
- * dataFrame = sqlContext.table("productRevenue")
- * revenue_difference = \
- * (func.max(dataFrame['revenue']).over(windowSpec) - dataFrame['revenue'])
- * dataFrame.select(
- * dataFrame['product'],
- * dataFrame['category'],
- * dataFrame['revenue'],
- * revenue_difference.alias("revenue_difference"))
- */
-object Sb3 extends Runnable {
-  final val DAMPING_FACTOR: Double = 0.85
-  var N_ITER: Int = 3
-  lazy val spark: SparkSession = {
-    val spark =
-      SparkSession
-        .builder
-        .config("spark.default.parallelism", "12")
-        .master("local[*]")
-        .appName("GraphxVsGraphFramesPageRanksApp")
-        .getOrCreate
-    spark.sparkContext.setLogLevel("ERROR")
-    spark
-  }
-
-  /*
-  spark.conf.set("spark.sql.autoBroadcastJoinThreshold", -1)
-      val VertexDataTable = spark.range(1000000)
-        .withColumn("v", $"id" + "url")
-        .repartition($"id")
-
-      val VertexMap = spark.range(1000000)
-        .withColumn("pid", pmod($"id", lit(5)))
-        .repartition($"id")
-
-      val EdgeTable = spark.range(1000000)
-        .withColumnRenamed("id", "pid")
-        .withColumn("src", pmod($"pid", lit(5)))
-        .withColumn("dst", pmod($"pid", lit(3)))
-        .repartition($"pid")
-
-      VertexDataTable.as("v")
-          .join(VertexMap.as("vm"),
-            $"v.id" === $"vm.id")
-          .join(EdgeTable.as("e"),
-            $"e.pid" === $"vm.pid" && ($"e.src" === $"v.id" || $"e.dst" === $"v.id"),
-            "right_outer").explain
-
-      VertexDataTable.as("v")
-        .join(EdgeTable.as("e"),
-          ($"e.src" === $"v.id" || $"e.dst" === $"v.id"),
-          "right_outer").explain
-   */
-
-
-  //  class ShowableDeltaTable extends DeltaTable{
-  //    def show() = {
-  //      deltaTable.toDF.show()
-  //    }
-  //  }
-
-  override def run(): Unit = {
-
-    /*
+/*
     import html2text
     import requests
     import os
@@ -115,6 +44,20 @@ object Sb3 extends Runnable {
         with open(url.replace("/", "_"), "w") as f:
             f.write(url_response_to_md(url))
      */
+object KeyWordsExtraction extends Runnable {
+  lazy val spark: SparkSession = {
+    val spark =
+      SparkSession
+        .builder
+        .config("spark.default.parallelism", "12")
+        .master("local[*]")
+        .appName("GraphxVsGraphFramesPageRanksApp")
+        .getOrCreate
+    spark.sparkContext.setLogLevel("ERROR")
+    spark
+  }
+
+  def getExampleDataFrame1(): DataFrame = {
     val urls = Seq(
       "https://www.oncrawl.com/seo-crawler/",
       "https://www.oncrawl.com/seo-log-analyzer/",
@@ -140,23 +83,18 @@ object Sb3 extends Runnable {
     val contents = urls
       .map(url => (url, fileContent(url)))
 
-    val df = spark.createDataFrame(contents).toDF("url", "content")
+    spark.createDataFrame(contents).toDF("url", "content")
       .withColumn("words", udf(
         (content: String) =>
-          Seq(
-            ("\n", " "),
-            (".", " "),
-            (",", " "),
-            (":", " "),
-            (";", " "),
-            ("!", " "),
-            ("?", " "),
-            ("'", " ")
-          ).foldLeft(content.toLowerCase())((content, pair) => content.replace(pair._1, pair._2))
+          """,?;.:/!*#"'{}()[]|\`@’""".map(c => (c.toString, ""))
+          .foldLeft(content.toLowerCase())((content, pair) => content.replace(pair._1, pair._2))
+          .replace("\n", " ")
             .split(" ")
             .filter(e => !e.isEmpty)
       ).apply(col("content")))
+  }
 
+  def getTFIDFTransformer(df: DataFrame): PipelineModel = {
     // ML
     var stages: Array[PipelineStage] = Array()
     // TF IDF  TODO: adaptativenumFeatures for collision
@@ -164,11 +102,13 @@ object Sb3 extends Runnable {
     stages = stages :+ new IDF() /*.setMinDocFreq()*/ .setInputCol("tf").setOutputCol("tfidf")
 
     val pipe = new Pipeline().setStages(stages)
-    val model = pipe.fit(df)
+    pipe.fit(df)
+  }
 
+  def getIndexToWordMapping(model: Transformer, df: DataFrame): Map[Long, String] = {
     // mapping
     import spark.implicits._
-    val indexToWord: Map[Long, String] = model.transform(
+    model.transform(
       df
         .select("words")
         .withColumn("words", explode(col("words")))
@@ -182,7 +122,10 @@ object Sb3 extends Runnable {
       )
       .withColumn("words", col("words")(0))
       .select("indices", "words").as[(Long, String)].collect().toMap
+  }
 
+  def getKeyWords(model: Transformer, df: DataFrame, indexToWord: Map[Long, String]): DataFrame = {
+    import spark.implicits._
     model
       .transform(df)
       .map(page => {
@@ -197,7 +140,14 @@ object Sb3 extends Runnable {
         )
         (url, keywords)
       }
-      ).show(false)
+      ).toDF("pages", "keywords")
+  }
+
+  override def run(): Unit = {
+    val df = getExampleDataFrame1()
+    val tfidf: Transformer = getTFIDFTransformer(df)
+    val indexToWord: Map[Long, String] = getIndexToWordMapping(tfidf, df)
+    getKeyWords(tfidf, df, indexToWord).show(false)
 
 
     // TODO: lemmatization

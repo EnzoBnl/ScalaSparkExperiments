@@ -1,6 +1,6 @@
 package com.enzobnl.sparkscalaexpe.playground
 
-import com.enzobnl.sparkscalaexpe.util.{QuickSparkSessionFactory, Utils}
+import com.enzobnl.sparkscalaexpe.util.Utils
 import org.apache.spark.graphx.GraphLoader
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -8,9 +8,16 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructT
 import org.apache.spark.sql.{Encoders, Row, SparkSession}
 
 case class User(id: Int, pseudo: String, name: String)
+
 object DatasetVsDataFrame extends Runnable {
 
-  lazy val spark: SparkSession = QuickSparkSessionFactory.getOrCreate()
+  lazy val spark: SparkSession = SparkSession
+    .builder
+    .config("spark.default.parallelism", (Runtime.getRuntime().availableProcessors() * 4).toString)
+    .config("spark.sql.shuffle.partitions", Runtime.getRuntime().availableProcessors() * 4)
+    .master("local[*]")
+    .appName("OnCrawlInRankBenches")
+    .getOrCreate
 
   override def run(): Unit = {
     val sc = spark.sparkContext

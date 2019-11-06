@@ -42,7 +42,6 @@ object GraphxVsGraphFramesPageRanks extends Runnable {
     val sc = spark.sparkContext
     // Load the edges as a graph
     val graph = GraphLoader.edgeListFile(sc, edgesPath)
-    graph
     println("N° edges =" + graph.edges.count())
     println("N° vertices =" + graph.vertices.count())
 
