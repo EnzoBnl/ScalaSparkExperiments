@@ -2,6 +2,9 @@ import scimple as scm
 import matplotlib.pyplot as plt
 import pygal
 import scimple.pygal_utils as pyu
+from pyspark.sql.column import Column
+from pyspark.sql.session import SparkSession
+from pyspark.sql.types import StringType
 
 s = """
 /**
@@ -154,16 +157,4 @@ def plotShuffleBenchGraphXPartitionings():
 
     print(pyu.to_html(line_chart))
 
-
-import html2text
-proc = html2text.HTML2Text()
-proc.ignore_links = True
-proc.ignore_images = True
-proc.emphasis_mark = ""
-proc.ul_item_mark = ""
-proc.strong_mark = ""
-docs = {}
-import requests
-docs["https://www.oncrawl.com/seo-crawler/"] = proc.handle(requests.get("https://www.oncrawl.com/seo-crawler/").text)
-print(docs["https://www.oncrawl.com/seo-crawler/"])
 
